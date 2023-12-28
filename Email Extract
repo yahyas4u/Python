@@ -1,0 +1,32 @@
+import extract_msg
+import zipfile  
+import pandas as pd
+import os
+import glob
+save_path = 'C:/Users/ymannambath/Desktop/Mail/MailRead/Mail Folder/'
+directory = "Excel"
+newpath = os.path.join(save_path, directory)
+if not os.path.exists(newpath):
+    os.makedirs(newpath)
+for each_file in glob.glob(save_path+'PIN Order*.msg'):
+    msg = extract_msg.openMsg(each_file)
+    mail_sub = msg.subject;
+    pwd_msg = extract_msg.openMsg(save_path+"Password "+mail_sub+".msg")
+    split_array = pwd_msg.body.split("Password is:")
+    for x in split_array[1:]:
+       pswd = x.strip()[:11]   
+    for attachment in msg.attachments:
+        attachment.save(customPath=save_path)
+        file_name = save_path+attachment.getFilename()   
+        with zipfile.ZipFile(file_name) as file:        
+            file.setpassword(pwd = bytes(pswd, 'utf-8'))
+            file.extractall(save_path)
+            for (root, dirs, file) in os.walk(save_path):
+               for f in file:
+                   if '.txt' in f:
+                       dataframe = pd.read_csv(save_path + f)                    
+                       dataframe.to_excel(newpath+ "/" +mail_sub+ '.xlsx',index = None)
+for each_file in glob.glob(save_path+'*.zip'):
+    os.remove(each_file)
+for each_file in glob.glob(save_path+'*.txt'):
+    os.remove(each_file)
