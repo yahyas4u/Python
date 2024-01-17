@@ -1,0 +1,73 @@
+import extract_msg
+import zipfile
+import logging
+import os
+import glob
+from datetime import datetime,timedelta
+import shutil
+import csv
+
+logging.basicConfig(filename='Log.log', level=logging.INFO)
+
+def manipulate_and_convert(csv_filename):
+    with open(csv_filename, 'r') as csv_file:
+        csv_reader = csv.reader(csv_file)
+        total_records = len(list(csv.reader(open(csv_filename)))) - 1
+        next(csv_reader, None)
+        header = next(csv_reader, None)
+        if not os.path.exists("batch_no.txt"):
+            with open('batch_no.txt', 'w') as txt_file:
+                txt_file.write('701\n')
+                num1 = 701
+        else:
+            with open('batch_no.txt', 'r+') as txt_file:
+                lines = txt_file.readlines()
+                num1 = int(lines[-1].strip())
+                num1 += 1
+                txt_file.write(str(num1) + '\n')
+        file_name = header[0] + "_" + datetime.today().strftime('%Y%m%d') + str(num1) + "_001_" + str(
+            total_records) + ".txt"
+        with open(file_name, 'w') as file_name:
+            with open(csv_filename, 'r') as csv_file:
+                csv_reader = csv.reader(csv_file)
+                next(csv_reader, None)
+                for row in csv_reader:
+                    rearranged_row = [row[i] for i in [1, 2] if i != 0]
+                    rearranged_row.insert(1, datetime.today().strftime('%d/%m/%Y'))
+                    next_year_date = datetime.now() + timedelta(days=365)
+                    rearranged_row.insert(2, next_year_date.strftime('%d/%m/%Y'))
+                    file_name.write(','.join(rearranged_row) + '\n')
+if not os.path.exists("Processed"):
+    os.makedirs("Processed")
+if not (glob.glob('PIN Order*.msg')):
+    logging.error('No msg files found.')
+else:
+    for each_file in glob.glob('PIN Order*.msg'):
+        msg = extract_msg.openMsg(each_file)
+        mail_sub = msg.subject
+        if not (glob.glob("Password " + mail_sub + ".msg")):
+            print("No Password .msg file found for: " + mail_sub)
+            logging.error("No Password .msg file found for: " + mail_sub)
+        else:
+            pwd_msg = extract_msg.openMsg("Password " + mail_sub + ".msg")
+            split_password_before = pwd_msg.body.split("Password is: ", 1)[1]
+            split_password_after = split_password_before.split("\r", 1)[0]
+            for attachment in msg.attachments:
+                attachment.save()
+                attachment_name_without_ext = os.path.splitext(os.path.basename(attachment.getFilename()))[0]
+                with zipfile.ZipFile(attachment.getFilename()) as file:
+                    file.setpassword(pwd=bytes(split_password_after, 'utf-8'))
+                    filename_with_ext = file.namelist()
+                    file.extractall()
+                    manipulate_and_convert(filename_with_ext[0])
+                    os.remove(filename_with_ext[0])
+                    pwd_msg.close()
+                    msg.close()
+                    os.remove("Password " + mail_sub + ".msg")
+            d = (str(datetime.today().year) + '-' + str(datetime.today().month).zfill(2) + '-' + str(datetime.today().day).zfill(2))
+            if not os.path.exists("Processed/" + d):
+                os.mkdir("Processed/" + d)
+            shutil.move(each_file, "Processed/" + d + "/" + each_file)
+            print("Successfully Processed On :", datetime.today())
+    for each_file in glob.glob('*.zip'):
+        os.remove(each_file)
